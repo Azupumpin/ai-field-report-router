@@ -1,0 +1,358 @@
+{
+  "name": "Automated Field Agent Issue Triage & Jira Sync Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Field Agent Issue Reporter",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Agent Name"
+            },
+            {
+              "fieldLabel": "Territory / Region"
+            },
+            {
+              "fieldLabel": "Issue Description"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        0
+      ],
+      "id": "be55f8bb-20a5-4e71-a770-297c4a1f3585",
+      "name": "On form submission",
+      "webhookId": "61468d5f-42a3-42de-abd2-4bbb465c03be"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json[\"Issue Description\"] }}",
+        "options": {
+          "systemMessage": "You are a Product Operations AI Assistant. Analyze the provided field agent report. Categorize the issue into exactly one of these types: 'Bug', 'Payment', 'Hardware', or 'Training'. Assign a priority level: 'High', 'Medium', or 'Low'. Provide a 1-sentence summary of the core product issue. Return a raw JSON object with keys: category, priority, summary"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "2dc799ad-d618-4d23-bc21-7cf7c2b094d5",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "google/gemma-2-27b-it",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        296,
+        232
+      ],
+      "id": "513da002-5bf5-4765-b6f7-ebb8781535af",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "QMWcgbzGNMWNrJdB",
+          "name": "OpenRouter account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let rawOutput = $input.first().json.output;\nlet cleanJsonString = rawOutput.replace(/```json/g, '').replace(/```/g, '').trim();\nlet parsedData = JSON.parse(cleanJsonString);\n\nreturn [\n  {\n    json: {\n      category: parsedData.category,\n      priority: parsedData.priority,\n      summary: parsedData.summary\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        0
+      ],
+      "id": "4217e345-32ce-41cc-bca4-154795f031ed",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "Bug",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "fd81f2c3-8927-48ca-bb3e-f8d525d6af2f"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "e1aa869d-8c1b-4721-b354-36b233aa87df",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "Bug",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEquals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        800,
+        0
+      ],
+      "id": "867930a8-3386-440d-b971-322d5aa6b805",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "project": {
+          "__rl": true,
+          "value": "10000",
+          "mode": "list",
+          "cachedResultName": "Utiva Product Management Training"
+        },
+        "issueType": {
+          "__rl": true,
+          "value": "10006",
+          "mode": "list",
+          "cachedResultName": "Bug"
+        },
+        "summary": "=[Field Bug] - {{ $json.summary }}",
+        "additionalFields": {
+          "description": "=Reported By: {{ $('On form submission').item.json['Agent Name'] }}\nTerritory: {{ $('On form submission').item.json['Territory / Region'] }}\nAI Priority: {{ $json.priority }}\n\nRaw Field Note:\n{{ $('On form submission').item.json['Issue Description'] }}"
+        }
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        1024,
+        -48
+      ],
+      "id": "a778de05-461c-4254-a4c0-b3ec6f91216e",
+      "name": "Create an issue",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "Tr6pO5Lfap4kOHWs",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/16r0oHBxxoUZ6cpBlBwUGRPcp9OV-ejK9h-9xQ3b7LNY/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/16r0oHBxxoUZ6cpBlBwUGRPcp9OV-ejK9h-9xQ3b7LNY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{ $now.format('yyyy-MM-dd HH:mm') }}",
+            "Agent Name": "={{ $('On form submission').item.json['Agent Name'] }}",
+            "Territory": "={{ $('On form submission').item.json['Territory / Region'] }}",
+            "Category": "={{ $('Code in JavaScript').item.json.category }}",
+            "Priority": "={{ $('Code in JavaScript').item.json.priority }}",
+            "Description": "={{ $('Code in JavaScript').item.json.summary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Agent Name",
+              "displayName": "Agent Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Territory",
+              "displayName": "Territory",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Priority",
+              "displayName": "Priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Description",
+              "displayName": "Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1024,
+        96
+      ],
+      "id": "28ec7cf2-bcd8-48eb-a5cc-d702484affe0",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "v12inUiDW82Hmequ",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Create an issue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2c2f5fb5-bdf4-47cb-8d54-b041e4c897d5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fd2805ae3a9a600075d71746bfc15c6f763422c7393217d6b2b196ae27a6c20d"
+  },
+  "nodeGroups": [],
+  "id": "WogEgA7AaIABHo8s",
+  "tags": []
+}
